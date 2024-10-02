@@ -42,6 +42,7 @@ def parse_input_file():
     city_visit_variables = {} # variables Y_(c, d) - 1 if tourist is visiting city c on day d - 0 
     base_city_start_flight_vars = [] # vars of flights that start at base city
     base_city_end_flight_vars = []   # vars of flights that end at base city.
+    days_of_holidays = 0 # number of days of tourist holidays.
 
     # Read the input from stdin
     input_data = sys.stdin.read().strip().splitlines()
@@ -62,6 +63,7 @@ def parse_input_file():
         city = City(name=city_info[0], code=city_info[1], nights=int(city_info[2]), variable=city_var)
         cities[city_info[1]] = city
         city_var = city_var + 1
+        days_of_holidays = days_of_holidays + city.nights
 
     # Reading the number of flights
     m = int(input_data[2 + n - 1])
@@ -98,7 +100,7 @@ def parse_input_file():
         city_visit_variables[(arrival_code, date)] = city_visit_variables_value
         city_visit_variables_value = city_visit_variables_value + 1
 
-    return flights_variables, city_visit_variables, cities, base_city, base_city_start_flight_vars, base_city_end_flight_vars
+    return flights_variables, city_visit_variables, cities, base_city, base_city_start_flight_vars, base_city_end_flight_vars, days_of_holidays
 
 def print_solution(m, flights):
     minimum_flights = ''
@@ -110,18 +112,19 @@ def print_solution(m, flights):
             total_price = total_price + flight.price
 
     print(total_price)
-    print(minimum_flights)
+    out = minimum_flights[:-1]
+    print(out)
 
 
 if __name__ == "__main__":
-    flights, city_visit_variables, cities, base_city, base_city_start_flight_vars, base_city_end_flight_vars = parse_input_file()
+    flights, city_visit_variables, cities, base_city, base_city_start_flight_vars, base_city_end_flight_vars, days_of_holidays = parse_input_file()
 
     solver = solver = RC2(WCNF())
 
     # Every city must be visited
-    '''for city_key in cities:
+    for city_key in cities:
         solver.add_clause([cities[city_key].variable])
-        #print([cities[city_key].variable])'''
+        #print([cities[city_key].variable]) 
 
     # Encoding Base City departure flight Constraints
     one_of_departures = []
@@ -138,6 +141,29 @@ if __name__ == "__main__":
         for j in range(i + 1, len(base_city_end_flight_vars)):
                 solver.add_clause([-base_city_end_flight_vars[i], -base_city_end_flight_vars[j]])
     solver.add_clause(one_of_arrivals)
+
+    # Encoding the flight must start at base city and end in base city after n days of holidays.
+    for base_city_departure_var in base_city_start_flight_vars:
+        arrival_day_vars = []
+
+        flight_day = flights[base_city_departure_var].day  # Format: DD/MM
+        days_to_add = days_of_holidays
+        # Parse the input date string into a datetime object (assuming the year is not important, default to 1900)
+        date_obj = datetime.strptime(flight_day, "%d/%m")
+
+        # Add the specified number of days using timedelta
+        new_date_obj = date_obj + timedelta(days=days_to_add)
+
+        # Format the new date back into the desired 'DD/MM' format
+        arrival_day = new_date_obj.strftime("%d/%m")
+
+        for base_city_arrival_var in base_city_end_flight_vars:
+            arrival_flight = flights[base_city_arrival_var]
+            if arrival_flight.day == arrival_day:
+                arrival_day_vars.append(base_city_arrival_var)
+        arrival_day_vars.insert(0, -base_city_departure_var)
+        solver.add_clause(arrival_day_vars)
+        #print(arrival_day_vars)
 
     # Encoding Flight Schedule Constraints: Ensure that if a flight 𝑓
     #is selected, the tourist must be in the departure city on the day of departure and in the arrival city on the day of arrival
